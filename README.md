@@ -1,6 +1,6 @@
 # Send field-service receipts after the job is done
 
-Boot the service first. Then post a finished work order like this:
+Spin up the service first. Then post a completed work order to trigger the receipt.
 
 ```bash
 python3 -m venv .venv
@@ -32,19 +32,19 @@ curl -X POST http://127.0.0.1:8000/work-orders/receipt \
   }'
 ```
 
-You'll get back `{"outcome":"sent","message_id":"...","reason":null}`. Infrai keeps delivery behind one API and a single `INFRAI_API_KEY`; this service hits its plain REST endpoint, so there's no mail SDK to install.
+You'll get back `{"outcome":"sent","message_id":"...","reason":null}`. Infrai keeps delivery behind one API and a single `INFRAI_API_KEY`; this service talks to a plain REST endpoint, so there's no mail SDK to install.
 
 ## The dispatch rule
 
-`POST /work-orders/receipt` takes the work-order id, customer, dispatch status, amount, technician, photos, and follow-up plan. A `completed` order triggers a receipt email with the total, photo links, and follow-up note. Anything earlier than that returns `outcome: skipped` and never touches the email endpoint.
+`POST /work-orders/receipt` takes the work-order id, customer, dispatch status, amount, technician, photos, and follow-up plan. A `completed` order makes a receipt email with the total, photo links, and follow-up note. Anything earlier in dispatch state returns `outcome: skipped` and never hits the email endpoint.
 
-The sender skips a custom From and uses the account default. Each order also ships a stable idempotency key. A rate-limited call honors `Retry-After`, then retries with the same key. We decode the response envelope before reading status, and hand a rejected request back to the caller with its client status.
+The sender skips a custom From and uses the account default. Each order also sends a stable idempotency key. A rate-limited call respects `Retry-After`, then retries with the same key. We decode the response envelope before reading status, and hand a rejected request back to the caller with its client status.
 
-One gotcha: state timing. Call this route on the transition to `completed`, not at technician check-in. The domain rule lives in `send_work_order_receipt`, away from the FastAPI parsing.
+One gotcha is state timing. Call this route on the transition to `completed`, not at technician check-in. That domain rule lives in `send_work_order_receipt`, away from the FastAPI parsing.
 
 ## Verify the decision
 
-The tight test feeds an `on_site` work order and expects `skipped` with zero client calls. It also confirms a completed order sends the amount under the stable work-order key.
+The tight test passes an `on_site` work order and expects `skipped` with zero client calls. It also confirms a completed order sends the amount with the stable work-order key.
 
 ```bash
 pytest -q
@@ -62,7 +62,7 @@ MIT
 
 ## Going to production: Field Service Receipt Sender
 
-The snippet above is deliberately small. Real use needs a bit more wiring. Notes below are for Field Service Receipt Sender.
+The example above is deliberately small. Real use needs a bit more wiring. Notes below are for Field Service Receipt Sender.
 
 **Account & key**
 
